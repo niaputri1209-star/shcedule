@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Jadwal Kelas Sekolah</title>
+    <title>Sistem Jadwal Kelas Sekolah (Offline)</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -51,7 +51,7 @@
 <body>
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay">
+    <div id="loading-overlay" class="loading-overlay hidden">
         <div class="spinner"></div>
         <p class="ml-4 text-gray-700 font-medium">Memuat...</p>
     </div>
@@ -62,8 +62,7 @@
         <!-- Header -->
         <header class="text-center py-6 border-b border-gray-200">
             <h1 class="text-4xl font-extrabold text-blue-700">Sistem Jadwal Kelas</h1>
-            <p class="mt-2 text-lg text-gray-600">Akses jadwal kelas Anda secara real-time.</p>
-            <p id="user-id-display" class="mt-1 text-xs text-gray-400"></p>
+            <p class="mt-2 text-lg text-gray-600">Akses jadwal kelas Anda secara offline.</p>
         </header>
 
         <!-- Feedback Message -->
@@ -132,15 +131,8 @@
                 </div>
 
                 <button id="save-schedule-btn" class="w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150">
-                    Simpan Jadwal ke Firestore
+                    Simpan Jadwal ke Penyimpanan Lokal
                 </button>
-                
-                <!-- NEW: Kontrol Akun Pengguna -->
-                <h2 class="text-2xl font-bold mb-4 border-b pb-2 border-gray-700 mt-8">Kontrol Akun Pengguna (Live)</h2>
-                <div id="user-list-container" class="space-y-4">
-                    <p class="text-center text-gray-400">Memuat daftar pengguna...</p>
-                    <!-- Daftar pengguna akan dirender di sini -->
-                </div>
 
             </div>
 
@@ -148,24 +140,8 @@
 
     </div>
 
-    <!-- Load Firebase SDKs -->
+    <!-- Script Aplikasi -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, getDoc, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        setLogLevel('Debug');
-
-        // --- Variabel Global Firebase dari Lingkungan Canvas ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        let app;
-        let db;
-        let auth;
-        let userId = null;
         let userClass = null;
         let isAdmin = false;
         
@@ -178,7 +154,7 @@
         ];
         
         const DAY_ORDER = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
-
+        const SCHEDULE_STORAGE_KEY = 'schoolSchedulesData';
 
         // Referensi DOM
         const authSection = document.getElementById('auth-section');
@@ -189,191 +165,73 @@
         const currentClassDisplay = document.getElementById('current-class-display');
         const loadingOverlay = document.getElementById('loading-overlay');
         const feedbackMessage = document.getElementById('feedback-message');
-        const userIdDisplay = document.getElementById('user-id-display');
         const loginClassSelect = document.getElementById('login-class-select');
         const adminClassSelect = document.getElementById('admin-class-select');
         const editor = document.getElementById('schedule-editor'); 
-        const userListContainer = document.getElementById('user-list-container');
 
-        let unsubscribeSchedule = () => {};
-        let unsubscribeUserList = () => {};
+        // --- FUNGSI PENYIMPANAN LOKAL (LOCALSTORAGE) ---
 
-        // --- FIREBASE PATH HELPERS ---
-
-        function getUserTrackingRef(uid) {
-            if (!db || !uid) return null;
-            // Path: /artifacts/{appId}/public/data/users/{uid}
-            return doc(db, `artifacts/${appId}/public/data/users`, uid);
-        }
-
-        const getUserTrackingCollectionRef = () => {
-            if (!db) return null;
-            // Path Koleksi Publik untuk melacak semua user
-            return collection(db, `artifacts/${appId}/public/data/users`);
-        };
-
-
-        // --- USER TRACKING LOGIC ---
-
-        const trackUserSession = async (email, selectedClass) => {
-            if (!auth.currentUser || !db) return;
-            const uid = auth.currentUser.uid;
-            const trackingRef = getUserTrackingRef(uid);
-            if (!trackingRef) return;
-            
+        /** Mengambil semua jadwal dari localStorage */
+        const getSchedulesFromStorage = () => {
+            const data = localStorage.getItem(SCHEDULE_STORAGE_KEY);
             try {
-                // Gunakan setDoc untuk upsert (memperbarui atau membuat) record pengguna
-                await setDoc(trackingRef, {
-                    userId: uid,
-                    email: email,
-                    currentClass: selectedClass,
-                    lastLogin: new Date().toISOString(),
-                }, { merge: true });
-                console.log("User session tracked:", uid);
+                return data ? JSON.parse(data) : {};
             } catch (e) {
-                console.error("Error tracking user session:", e);
+                console.error("Gagal mem-parsing data jadwal dari localStorage:", e);
+                return {};
             }
         };
-
-        const deleteUserTracking = async (uid) => {
-            const trackingRef = getUserTrackingRef(uid);
-            if (!trackingRef) return;
-            
+        
+        /** Menyimpan semua jadwal ke localStorage */
+        const setSchedulesToStorage = (schedules) => {
+            try {
+                localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules));
+            } catch (e) {
+                console.error("Gagal menyimpan jadwal ke localStorage:", e);
+            }
+        };
+        
+        /** Menyimpan jadwal untuk satu kelas spesifik */
+        const saveScheduleToLocalStorage = (className, scheduleData) => {
             loadingOverlay.classList.remove('hidden');
-            try {
-                await deleteDoc(trackingRef);
-                showFeedback('success', `Jejak pengguna ${uid} berhasil dihapus.`);
-            } catch (e) {
-                console.error("Error deleting user tracking:", e);
-                showFeedback('danger', `Gagal menghapus jejak pengguna: ${e.message}`);
-            } finally {
+            const allSchedules = getSchedulesFromStorage();
+            allSchedules[className] = scheduleData;
+            setSchedulesToStorage(allSchedules);
+            
+            setTimeout(() => { // Simulasi proses penyimpanan
                 loadingOverlay.classList.add('hidden');
-            }
+                showFeedback('success', `Jadwal Kelas ${className} berhasil disimpan di peramban.`);
+            }, 300);
+        };
+        
+        /** Memuat jadwal untuk editor admin */
+        const loadScheduleToEditor = (className) => {
+            loadingOverlay.classList.remove('hidden');
+            const allSchedules = getSchedulesFromStorage();
+            const schedule = allSchedules[className] || defaultSchedule;
+            
+            editor.value = JSON.stringify(schedule, null, 2);
+            loadingOverlay.classList.add('hidden');
         };
 
+        // --- FUNGSI UI & ALUR APLIKASI ---
 
-        // --- ADMIN UI & LISTENER ---
-
-        const setupUserListListener = () => {
-            unsubscribeUserList(); // Hentikan listener lama
-            const usersRef = getUserTrackingCollectionRef();
-            if (!usersRef) return;
-
-            // Listen to all users in real-time
-            unsubscribeUserList = onSnapshot(usersRef, (snapshot) => {
-                const users = [];
-                snapshot.forEach((doc) => {
-                    users.push({ id: doc.id, ...doc.data() });
-                });
-                renderUserList(users);
-            }, (error) => {
-                console.error("Error listening to user list:", error);
-            });
-        };
-
-        const renderUserList = (users) => {
-            if (!userListContainer) return;
-
-            // Filter admin's own record from the list
-            const filteredUsers = users.filter(user => user.userId !== userId); 
-
-            if (filteredUsers.length === 0) {
-                userListContainer.innerHTML = '<p class="text-center text-gray-400">Tidak ada pengguna yang terdaftar saat ini (selain admin).</p>';
-                return;
-            }
-
-            userListContainer.innerHTML = filteredUsers.sort((a, b) => {
-                // Urutkan berdasarkan lastLogin (terbaru dulu)
-                return new Date(b.lastLogin) - new Date(a.lastLogin);
-            }).map(user => `
-                <div class="bg-gray-700 p-3 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center transition duration-150 hover:bg-gray-600 space-y-2 sm:space-y-0">
-                    <div class="text-sm">
-                        <p class="font-semibold">${user.email || 'Anonim'}</p>
-                        <p class="text-xs text-gray-300">Kelas: <span class="font-medium text-blue-300">${user.currentClass}</span></p>
-                        <p class="text-xs text-gray-500">Masuk Terakhir: ${new Date(user.lastLogin).toLocaleString()}</p>
-                        <p class="text-xs text-gray-500 break-words">UID: ${user.userId}</p>
-                    </div>
-                    <button data-uid="${user.id}" class="delete-user-btn bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-xs font-bold transition duration-150 w-full sm:w-auto">
-                        Hapus Jejak
-                    </button>
-                </div>
-            `).join('');
-
-            // Tambahkan event listeners untuk tombol hapus
-            userListContainer.querySelectorAll('.delete-user-btn').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const uidToDelete = e.currentTarget.dataset.uid;
-                    // Menggunakan window.confirm sebagai pengganti modal kustom
-                    if (window.confirm(`Yakin ingin menghapus jejak sesi pengguna ini?\nUID: ${uidToDelete}`)) {
-                        deleteUserTracking(uidToDelete);
-                    }
-                });
-            });
-        };
-
-
-        // --- INITIALIZATION & UI FLOW ---
-
-        const initFirebase = async () => {
-            if (!Object.keys(firebaseConfig).length) {
-                console.error("Firebase config is missing.");
-                showFeedback('danger', 'Kesalahan: Konfigurasi Firebase tidak ditemukan.');
-                return;
-            }
-
-            try {
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // Isi dropdown kelas di form login
-                loginClassSelect.innerHTML = XII_CLASSES.map(cls => 
-                    `<option value="${cls}">${cls}</option>`
-                ).join('') + `<option value="${ADMIN_CLASS}">AdminSekolah</option>`;
-
-
-                // Autentikasi menggunakan token kustom atau anonim
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // Listener status autentikasi
-                onAuthStateChanged(auth, (user) => {
-                    loadingOverlay.classList.add('hidden');
-                    if (user) {
-                        userId = user.uid;
-                        userIdDisplay.textContent = `ID Pengguna (Debug): ${userId}`;
-                        const storedClass = localStorage.getItem('userClass');
-                        const storedEmail = localStorage.getItem('userEmail');
-                        
-                        if (storedClass && storedEmail) {
-                            userClass = storedClass;
-                            const email = storedEmail;
-                            
-                            isAdmin = (email === ADMIN_EMAIL && userClass === ADMIN_CLASS);
-                            
-                            showMainApp();
-                            // NEW: Panggil trackUserSession saat auth siap dan userClass tersedia
-                            if (auth.currentUser) {
-                                trackUserSession(email, userClass);
-                            }
-
-                        } else {
-                            showAuthSection(); 
-                        }
-                    } else {
-                        userId = crypto.randomUUID(); 
-                        userIdDisplay.textContent = `ID Pengguna (Anonim): ${userId}`;
-                        showAuthSection();
-                    }
-                });
-
-            } catch (error) {
-                console.error("Error during Firebase initialization or authentication:", error);
-                loadingOverlay.classList.add('hidden');
-                showFeedback('danger', `Gagal inisialisasi: ${error.message}`);
+        const initApp = () => {
+            // Isi dropdown kelas di form login
+            loginClassSelect.innerHTML = XII_CLASSES.map(cls => 
+                `<option value="${cls}">${cls}</option>`
+            ).join('') + `<option value="${ADMIN_CLASS}">AdminSekolah</option>`;
+            
+            // Cek sesi dari localStorage
+            const storedClass = localStorage.getItem('userClass');
+            const storedEmail = localStorage.getItem('userEmail');
+            
+            if (storedClass && storedEmail) {
+                userClass = storedClass;
+                isAdmin = (storedEmail === ADMIN_EMAIL && userClass === ADMIN_CLASS);
+                showMainApp();
+            } else {
+                showAuthSection(); 
             }
         };
 
@@ -404,16 +262,13 @@
                 adminPanel.classList.remove('hidden');
                 adminToggleBtn.classList.remove('hidden');
                 populateAdminClassDropdown();
-                // NEW: Mulai listener daftar pengguna saat admin masuk
-                setupUserListListener();
             } else {
                 adminPanel.classList.add('hidden');
                 adminToggleBtn.classList.add('hidden');
-                unsubscribeUserList(); // Pastikan listener dimatikan jika bukan admin
             }
             
             loadClassNames();
-            startScheduleListener(userClass);
+            loadAndDisplaySchedule(userClass);
         };
         
         // Handle Form Login
@@ -433,29 +288,15 @@
             userClass = selectedClass;
             isAdmin = (email === ADMIN_EMAIL && userClass === ADMIN_CLASS);
             
-            // NEW: Lacak sesi setelah login (hanya jika auth sudah siap)
-            if (auth.currentUser) {
-                trackUserSession(email, userClass);
-            }
-
             showMainApp();
             showFeedback('success', `Berhasil masuk sebagai ${userClass}.`);
         });
 
-
-        // --- Data Handling (Load Class, Load Editor, Save Schedule) ---
-
-        const loadClassNames = async () => {
-            try {
-                const allClasses = XII_CLASSES;
-
-                classSelect.innerHTML = allClasses.map(cls => 
-                    `<option value="${cls}" ${cls === userClass ? 'selected' : ''}>${cls}</option>`
-                ).join('');
-                
-            } catch (error) {
-                console.error("Error loading class names:", error);
-            }
+        const loadClassNames = () => {
+            const allClasses = XII_CLASSES;
+            classSelect.innerHTML = allClasses.map(cls => 
+                `<option value="${cls}" ${cls === userClass ? 'selected' : ''}>${cls}</option>`
+            ).join('');
         };
 
         const populateAdminClassDropdown = () => {
@@ -469,50 +310,7 @@
             } else {
                 adminClassSelect.value = 'XII-A';
             }
-
-            const selectedClass = adminClassSelect.value;
-            loadScheduleToEditor(selectedClass);
-        };
-        
-        const loadScheduleToEditor = async (className) => {
-            if (!db || !className) return;
-
-            loadingOverlay.classList.remove('hidden');
-            const scheduleRef = doc(db, `artifacts/${appId}/public/data/schedules/${className}`);
-            
-            try {
-                const docSnap = await getDoc(scheduleRef);
-                let schedule = defaultSchedule;
-
-                if (docSnap.exists() && docSnap.data().schedule) {
-                    schedule = docSnap.data().schedule;
-                }
-                
-                editor.value = JSON.stringify(schedule, null, 2);
-            } catch (error) {
-                console.error("Error loading schedule to editor:", error);
-                showFeedback('danger', `Gagal memuat jadwal ${className} ke editor.`);
-                editor.value = JSON.stringify(defaultSchedule, null, 2);
-            } finally {
-                loadingOverlay.classList.add('hidden');
-            }
-        };
-
-        const saveSchedule = async (className, scheduleData) => {
-            if (!db || !className || !scheduleData) return;
-            
-            loadingOverlay.classList.remove('hidden');
-            const scheduleRef = doc(db, `artifacts/${appId}/public/data/schedules/${className}`);
-
-            try {
-                await setDoc(scheduleRef, { schedule: scheduleData });
-                showFeedback('success', `Jadwal Kelas ${className} berhasil diperbarui di Firestore.`);
-            } catch (error) {
-                console.error("Error saving schedule:", error);
-                showFeedback('danger', `Gagal menyimpan jadwal: ${error.message}`);
-            } finally {
-                loadingOverlay.classList.add('hidden');
-            }
+            loadScheduleToEditor(adminClassSelect.value);
         };
         
         // Data Jadwal Default
@@ -550,43 +348,25 @@
         ];
 
 
-        // Listener Real-time Jadwal
-        const startScheduleListener = (className) => {
-            unsubscribeSchedule(); 
-            
+        const loadAndDisplaySchedule = (className) => {
             if (!className) return;
 
             currentClassDisplay.textContent = className;
             loadingOverlay.classList.remove('hidden');
 
-            const scheduleRef = doc(db, `artifacts/${appId}/public/data/schedules/${className}`);
+            const allSchedules = getSchedulesFromStorage();
+            const schedule = allSchedules[className] || defaultSchedule;
             
-            unsubscribeSchedule = onSnapshot(scheduleRef, (docSnap) => {
-                loadingOverlay.classList.add('hidden');
-                
-                let schedule = defaultSchedule; 
-                
-                if (docSnap.exists()) {
-                    schedule = Array.isArray(docSnap.data().schedule) ? docSnap.data().schedule : defaultSchedule;
-                    showFeedback('success', `Jadwal Kelas ${className} berhasil diperbarui secara real-time.`);
-                } else {
-                    console.log(`Dokumen jadwal untuk kelas ${className} tidak ditemukan. Menggunakan jadwal default.`);
-                    showFeedback('info', `Jadwal Kelas ${className} belum tersedia, menampilkan data default.`);
+            renderSchedule(schedule, className);
+            
+            if (isAdmin) {
+                const currentAdminClass = adminClassSelect.value;
+                if (currentAdminClass === className) {
+                    editor.value = JSON.stringify(schedule, null, 2);
                 }
-                
-                renderSchedule(schedule, className);
-                
-                if (isAdmin) {
-                    const currentAdminClass = adminClassSelect.value;
-                    if (currentAdminClass === className || (className === ADMIN_CLASS && currentAdminClass !== ADMIN_CLASS)) {
-                        editor.value = JSON.stringify(schedule, null, 2);
-                    }
-                }
-                
-            }, (error) => {
-                console.error("Error listening to schedule:", error);
-                showFeedback('danger', `Gagal memuat jadwal: ${error.message}`);
-            });
+            }
+
+            setTimeout(() => loadingOverlay.classList.add('hidden'), 200);
         };
 
         // Fungsi Rendering Jadwal
@@ -642,7 +422,7 @@
 
         // --- Event Listeners ---
 
-        document.addEventListener('DOMContentLoaded', initFirebase);
+        document.addEventListener('DOMContentLoaded', initApp);
         
         classSelect.addEventListener('change', (e) => {
             const newClass = e.target.value;
@@ -652,12 +432,11 @@
                 
                 if (newClass !== ADMIN_CLASS) {
                     isAdmin = false;
-                    localStorage.setItem('userEmail', 'siswa@sekolah.edu');
+                    localStorage.setItem('userEmail', 'siswa@sekolah.edu'); // Ganti email jika bukan admin lagi
                     adminPanel.classList.add('hidden');
                     document.getElementById('admin-toggle-btn').classList.add('hidden');
-                    unsubscribeUserList(); // Matikan listener pengguna
                 }
-                startScheduleListener(newClass);
+                loadAndDisplaySchedule(newClass);
             }
         });
         
@@ -684,14 +463,12 @@
                      showFeedback('danger', 'Data harus berupa array JSON.');
                      return;
                 }
-                
-                saveSchedule(selectedClass, parsedSchedule);
+                saveScheduleToLocalStorage(selectedClass, parsedSchedule);
             } catch (e) {
                 showFeedback('danger', `Kesalahan format JSON: ${e.message}`);
                 console.error("JSON Parse Error:", e);
             }
         });
-
 
     </script>
 </body>
