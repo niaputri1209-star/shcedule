@@ -93,17 +93,21 @@
         <section id="main-app" class="hidden mt-10">
             
             <!-- Kontrol User Biasa -->
-            <div class="bg-white p-6 rounded-xl shadow-md mb-8 flex flex-col sm:flex-row justify-between items-center">
-                <div class="text-lg font-medium text-gray-700 mb-4 sm:mb-0">
+            <div class="bg-white p-6 rounded-xl shadow-md mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="text-lg font-medium text-gray-700 text-center sm:text-left">
                     Anda melihat jadwal untuk kelas: <span id="current-class-display" class="font-bold text-blue-600"></span>
                 </div>
-                <div class="flex items-center space-x-3 w-full sm:w-auto">
+                <div class="flex items-center space-x-3 w-full sm:w-auto justify-center">
                     <label for="class-select" class="text-sm font-medium text-gray-700 hidden sm:block">Ganti Kelas:</label>
-                    <select id="class-select" class="px-3 py-1 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm w-full sm:w-40">
+                    <select id="class-select" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm w-auto">
                         <!-- Opsi kelas akan diisi oleh JS -->
                     </select>
-                    <button id="admin-toggle-btn" class="hidden bg-yellow-500 text-white p-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition duration-150">
+                    <button id="admin-toggle-btn" class="hidden bg-yellow-500 text-white p-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition duration-150 whitespace-nowrap">
                         Panel Admin
+                    </button>
+                    <!-- Tombol Log Out Baru -->
+                    <button id="logout-btn" class="bg-red-500 text-white p-2 rounded-lg text-sm font-medium hover:bg-red-600 transition duration-150">
+                        Log Out
                     </button>
                 </div>
             </div>
@@ -443,6 +447,15 @@
         document.getElementById('admin-toggle-btn').addEventListener('click', () => {
              adminPanel.classList.toggle('hidden');
         });
+
+        // Event listener untuk tombol Log Out baru
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            // Hapus data sesi dari localStorage
+            localStorage.removeItem('userEmail');
+            localStorage.removeItem('userClass');
+            // Muat ulang halaman, yang akan mengarahkan ke layar login
+            location.reload();
+        });
         
         adminClassSelect.addEventListener('change', (e) => {
             loadScheduleToEditor(e.target.value);
@@ -464,6 +477,12 @@
                      return;
                 }
                 saveScheduleToLocalStorage(selectedClass, parsedSchedule);
+                
+                // BARU: Segarkan (render ulang) tampilan jika admin mengedit jadwal yang sedang ditampilkan
+                if (selectedClass === classSelect.value) {
+                    renderSchedule(parsedSchedule, selectedClass);
+                }
+
             } catch (e) {
                 showFeedback('danger', `Kesalahan format JSON: ${e.message}`);
                 console.error("JSON Parse Error:", e);
