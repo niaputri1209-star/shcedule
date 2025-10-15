@@ -128,15 +128,65 @@
                     </select>
                 </div>
 
-                <div class="mb-6">
-                    <label for="schedule-editor" class="block text-sm font-medium text-gray-300 mb-2">Editor Jadwal (Format JSON)</label>
-                    <textarea id="schedule-editor" rows="15" class="mt-1 block w-full p-4 border border-gray-600 bg-gray-900 rounded-lg font-mono text-sm text-white focus:ring-blue-500 focus:border-blue-500" placeholder='[{"day": "Senin", "time": "07:30 - 08:30", "subject": "Matematika", "teacher": "Bpk. Guru"}, ...]'></textarea>
-                    <p class="text-xs text-gray-400 mt-1">Pastikan format JSON sudah benar sebelum menyimpan.</p>
+                <!-- Konten Editor Jadwal Berbasis Tabel -->
+                <div class="space-y-6">
+                    <!-- Form Tambah Entri Baru -->
+                    <div class="bg-gray-700 p-4 rounded-lg shadow-inner">
+                        <h3 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Tambah Mata Pelajaran</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div>
+                                <label for="editor-day" class="block text-xs font-medium text-gray-400">Hari</label>
+                                <select id="editor-day" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm">
+                                    <option value="Senin">Senin</option>
+                                    <option value="Selasa">Selasa</option>
+                                    <option value="Rabu">Rabu</option>
+                                    <option value="Kamis">Kamis</option>
+                                    <option value="Jumat">Jumat</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="editor-time" class="block text-xs font-medium text-gray-400">Waktu (ex: 07:30 - 08:30)</label>
+                                <input type="text" id="editor-time" placeholder="07:30 - 08:30" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm" />
+                            </div>
+                            <div>
+                                <label for="editor-subject" class="block text-xs font-medium text-gray-400">Mata Pelajaran</label>
+                                <input type="text" id="editor-subject" placeholder="Matematika" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm" />
+                            </div>
+                            <div>
+                                <label for="editor-teacher" class="block text-xs font-medium text-gray-400">Guru</label>
+                                <input type="text" id="editor-teacher" placeholder="Bpk. Guru" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm" />
+                            </div>
+                        </div>
+                        <button id="add-schedule-btn" class="mt-4 w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition duration-150">
+                            Tambah Jadwal ke Editor
+                        </button>
+                    </div>
+
+                    <!-- Area Editor Tabel -->
+                    <div class="bg-gray-700 p-4 rounded-lg shadow-inner max-h-[500px] overflow-y-auto">
+                        <h3 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Daftar Jadwal Kelas (Klik ikon edit untuk mengubah)</h3>
+                        <table class="w-full text-left text-sm">
+                            <thead class="sticky top-0 bg-gray-800 text-gray-300">
+                                <tr>
+                                    <th class="p-2 w-1/12">No.</th>
+                                    <th class="p-2 w-2/12">Hari</th>
+                                    <th class="p-2 w-2/12">Waktu</th>
+                                    <th class="p-2 w-3/12">Pelajaran</th>
+                                    <th class="p-2 w-3/12">Guru</th>
+                                    <th class="p-2 w-1/12 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="schedule-editor-table">
+                                <!-- Isi tabel editor akan di-render di sini -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                <button id="save-schedule-btn" class="w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150">
-                    Simpan Jadwal ke Penyimpanan Lokal
+                <button id="save-schedule-btn" class="mt-6 w-full py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150">
+                    Simpan Perubahan Jadwal ke Penyimpanan Lokal
                 </button>
+                <!-- Tombol Simpan Jadwal Lama dihapus -->
 
             </div>
 
@@ -148,6 +198,7 @@
     <script type="module">
         let userClass = null;
         let isAdmin = false;
+        let currentEditingSchedule = []; // State untuk jadwal yang sedang diedit
         
         const ADMIN_EMAIL = 'admin@sekolah.edu';
         const ADMIN_CLASS = 'AdminSekolah'; 
@@ -171,7 +222,15 @@
         const feedbackMessage = document.getElementById('feedback-message');
         const loginClassSelect = document.getElementById('login-class-select');
         const adminClassSelect = document.getElementById('admin-class-select');
-        const editor = document.getElementById('schedule-editor'); 
+        
+        // Referensi DOM Editor Baru
+        const editorDay = document.getElementById('editor-day');
+        const editorTime = document.getElementById('editor-time');
+        const editorSubject = document.getElementById('editor-subject');
+        const editorTeacher = document.getElementById('editor-teacher');
+        const addScheduleBtn = document.getElementById('add-schedule-btn');
+        const scheduleEditorTable = document.getElementById('schedule-editor-table');
+        const saveScheduleBtn = document.getElementById('save-schedule-btn');
 
         // --- FUNGSI PENYIMPANAN LOKAL (LOCALSTORAGE) ---
 
@@ -208,13 +267,16 @@
             }, 300);
         };
         
-        /** Memuat jadwal untuk editor admin */
+        /** Memuat jadwal ke editor admin (mode tabel) */
         const loadScheduleToEditor = (className) => {
             loadingOverlay.classList.remove('hidden');
             const allSchedules = getSchedulesFromStorage();
             const schedule = allSchedules[className] || defaultSchedule;
             
-            editor.value = JSON.stringify(schedule, null, 2);
+            // Simpan ke state untuk diedit (deep copy agar aman)
+            currentEditingSchedule = JSON.parse(JSON.stringify(schedule)); 
+            
+            renderEditableSchedule(currentEditingSchedule);
             loadingOverlay.classList.add('hidden');
         };
 
@@ -351,6 +413,68 @@
             { day: "Jumat", time: "11:45 - 12:45", subject: "P5", teacher: "Fasilitator" },
         ];
 
+        /** Merender data jadwal ke editor tabel admin */
+        const renderEditableSchedule = (schedule) => {
+            scheduleEditorTable.innerHTML = '';
+
+            // Urutkan jadwal berdasarkan urutan hari
+            schedule.sort((a, b) => {
+                const dayA = DAY_ORDER.indexOf(a.day);
+                const dayB = DAY_ORDER.indexOf(b.day);
+                if (dayA !== dayB) {
+                    return dayA - dayB;
+                }
+                // Jika hari sama, urutkan berdasarkan waktu
+                return a.time.localeCompare(b.time); 
+            });
+            
+            if (schedule.length === 0) {
+                scheduleEditorTable.innerHTML = '<tr><td colspan="6" class="p-3 text-center text-gray-400">Belum ada entri jadwal.</td></tr>';
+                return;
+            }
+
+            schedule.forEach((item, index) => {
+                const row = scheduleEditorTable.insertRow();
+                row.className = 'border-t border-gray-600 hover:bg-gray-800 transition duration-100';
+                
+                // No
+                row.insertCell().textContent = index + 1;
+                row.cells[0].className = 'p-2 text-gray-400';
+
+                // Day (Index 1)
+                const dayCell = row.insertCell();
+                dayCell.innerHTML = `<span data-field="day">${item.day}</span>`;
+                dayCell.className = 'p-2 font-medium';
+
+                // Time (Index 2)
+                const timeCell = row.insertCell();
+                timeCell.innerHTML = `<span data-field="time">${item.time}</span>`;
+                timeCell.className = 'p-2 font-mono text-xs';
+
+                // Subject (Index 3)
+                const subjectCell = row.insertCell();
+                subjectCell.innerHTML = `<span data-field="subject">${item.subject}</span>`;
+                subjectCell.className = 'p-2 font-semibold';
+
+                // Teacher (Index 4)
+                const teacherCell = row.insertCell();
+                teacherCell.innerHTML = `<span data-field="teacher">${item.teacher}</span>`;
+                teacherCell.className = 'p-2 text-gray-300';
+
+                // Actions (Index 5)
+                const actionCell = row.insertCell();
+                actionCell.className = 'p-2 text-center whitespace-nowrap';
+                actionCell.innerHTML = `
+                    <button onclick="handleEditRow(${index}, this)" class="text-blue-400 hover:text-blue-200 p-1 rounded-md transition duration-150">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-5-1a3 3 0 11-6 0 3 3 0 016 0zM17 3l4 4L13 15 9 16l1-4L17 3z"/></svg>
+                    </button>
+                    <button onclick="handleDeleteRow(${index})" class="text-red-400 hover:text-red-200 p-1 rounded-md transition duration-150 ml-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                `;
+            });
+        };
+
 
         const loadAndDisplaySchedule = (className) => {
             if (!className) return;
@@ -363,17 +487,16 @@
             
             renderSchedule(schedule, className);
             
-            if (isAdmin) {
-                const currentAdminClass = adminClassSelect.value;
-                if (currentAdminClass === className) {
-                    editor.value = JSON.stringify(schedule, null, 2);
-                }
+            // Perbarui editor jika admin sedang melihat kelas ini
+            if (isAdmin && adminClassSelect.value === className) {
+                // Jangan panggil loadScheduleToEditor di sini, karena akan me-reset perubahan yang belum disimpan.
+                // Biarkan editor admin diupdate hanya saat dropdown admin berubah atau saat login.
             }
 
             setTimeout(() => loadingOverlay.classList.add('hidden'), 200);
         };
 
-        // Fungsi Rendering Jadwal
+        // Fungsi Rendering Jadwal (Tampilan Biasa)
         const renderSchedule = (schedule, className) => {
             scheduleDisplay.innerHTML = '';
             
@@ -393,6 +516,9 @@
                     const dayCard = document.createElement('div');
                     dayCard.className = 'bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden';
                     
+                    // Urutkan jadwal di setiap hari berdasarkan waktu
+                    daySchedules.sort((a, b) => a.time.localeCompare(b.time));
+
                     let tableRows = daySchedules.map((item, index) => `
                         <tr class="${item.subject.toLowerCase() === 'istirahat' ? 'bg-yellow-50 text-yellow-800 font-medium' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">
                             <td class="w-1/6 font-mono text-sm">${item.time}</td>
@@ -422,6 +548,133 @@
                 }
             });
         };
+
+        // --- FUNGSI EDITOR TABEL BARU ---
+
+        const handleAddEntry = () => {
+            const day = editorDay.value;
+            const time = editorTime.value.trim();
+            const subject = editorSubject.value.trim();
+            const teacher = editorTeacher.value.trim();
+
+            if (!day || !time || !subject || !teacher) {
+                showFeedback('danger', 'Semua kolom Tambah Jadwal harus diisi.');
+                return;
+            }
+
+            const newEntry = { day, time, subject, teacher };
+            currentEditingSchedule.push(newEntry);
+            
+            // Render ulang tabel editor dan kosongkan input
+            renderEditableSchedule(currentEditingSchedule);
+            editorTime.value = '';
+            editorSubject.value = '';
+            editorTeacher.value = '';
+            showFeedback('info', `Entri untuk ${day} berhasil ditambahkan.`);
+        };
+
+        // Fungsi yang dipanggil saat tombol edit diklik
+        const handleEditRow = (index, buttonElement) => {
+            const row = buttonElement.closest('tr');
+            const item = currentEditingSchedule[index];
+
+            if (!row || !item) return;
+
+            // 1. Ubah tombol menjadi 'Simpan'
+            buttonElement.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            `;
+            buttonElement.classList.remove('text-blue-400');
+            buttonElement.classList.add('text-green-400');
+            buttonElement.setAttribute('onclick', `handleSaveEdit(${index}, this)`);
+
+            // 2. Ubah sel menjadi input field
+
+            // Sel Hari (Index 1): Menggunakan Select Box
+            const dayCell = row.cells[1];
+            const dayInput = document.createElement('select');
+            dayInput.className = 'w-full p-1 border border-gray-500 bg-gray-800 rounded text-sm';
+            DAY_ORDER.slice(0, 5).forEach(d => { // Hanya Senin sampai Jumat
+                const option = document.createElement('option');
+                option.value = d;
+                option.textContent = d;
+                if (d === item.day) option.selected = true;
+                dayInput.appendChild(option);
+            });
+            dayCell.innerHTML = '';
+            dayCell.appendChild(dayInput);
+            dayInput.setAttribute('data-field-input', 'day');
+
+            // Sel Waktu, Pelajaran, Guru (Index 2, 3, 4): Menggunakan Text Input
+            const fields = ['time', 'subject', 'teacher'];
+            fields.forEach((field, i) => {
+                const cell = row.cells[i + 2];
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = item[field];
+                input.placeholder = field.charAt(0).toUpperCase() + field.slice(1);
+                input.className = 'w-full p-1 border border-gray-500 bg-gray-800 rounded text-sm';
+                input.setAttribute('data-field-input', field);
+                cell.innerHTML = '';
+                cell.appendChild(input);
+            });
+        };
+
+        // Fungsi yang dipanggil saat tombol simpan (dari mode edit) diklik
+        const handleSaveEdit = (index, buttonElement) => {
+            const row = buttonElement.closest('tr');
+            const inputs = row.querySelectorAll('[data-field-input]');
+            
+            const updatedItem = {};
+            let isValid = true;
+
+            inputs.forEach(input => {
+                const field = input.getAttribute('data-field-input');
+                const value = input.value.trim();
+                
+                if (!value) {
+                    showFeedback('danger', `Kolom ${field.toUpperCase()} tidak boleh kosong.`);
+                    input.focus();
+                    isValid = false;
+                    return;
+                }
+                updatedItem[field] = value;
+            });
+
+            if (!isValid) return;
+
+            // Update state
+            currentEditingSchedule[index] = updatedItem;
+
+            // Render ulang editor (untuk kembali ke mode tampilan dan memperbarui data)
+            renderEditableSchedule(currentEditingSchedule);
+            showFeedback('success', `Entri jadwal berhasil diperbarui.`);
+        };
+        
+        // Fungsi yang dipanggil saat tombol hapus diklik
+        const handleDeleteRow = (index) => {
+            if (confirm(`Yakin ingin menghapus jadwal: ${currentEditingSchedule[index].subject} pada hari ${currentEditingSchedule[index].day}?`)) {
+                currentEditingSchedule.splice(index, 1);
+                renderEditableSchedule(currentEditingSchedule);
+                showFeedback('success', 'Entri jadwal berhasil dihapus dari editor.');
+            }
+        };
+
+        // Fungsi yang dipanggil saat tombol Simpan Perubahan Jadwal diklik
+        const handleSaveToStorage = () => {
+            const selectedClass = adminClassSelect.value;
+            saveScheduleToLocalStorage(selectedClass, currentEditingSchedule);
+            
+            // Segarkan (render ulang) tampilan jika admin mengedit jadwal yang sedang ditampilkan
+            if (selectedClass === classSelect.value) {
+                renderSchedule(currentEditingSchedule, selectedClass);
+            }
+        }
+        
+        // Agar fungsi-fungsi editor dapat diakses oleh onclick di HTML
+        window.handleEditRow = handleEditRow;
+        window.handleSaveEdit = handleSaveEdit;
+        window.handleDeleteRow = handleDeleteRow;
 
 
         // --- Event Listeners ---
@@ -457,37 +710,16 @@
             location.reload();
         });
         
+        // Event listener: Admin mengganti kelas yang akan diedit
         adminClassSelect.addEventListener('change', (e) => {
             loadScheduleToEditor(e.target.value);
         });
 
-        document.getElementById('save-schedule-btn').addEventListener('click', () => {
-            const selectedClass = adminClassSelect.value;
-            const jsonText = editor.value.trim();
-            
-            if (!jsonText) {
-                showFeedback('danger', 'Editor tidak boleh kosong.');
-                return;
-            }
+        // Event listener: Tombol Tambah Jadwal di Editor
+        addScheduleBtn.addEventListener('click', handleAddEntry);
 
-            try {
-                const parsedSchedule = JSON.parse(jsonText);
-                if (!Array.isArray(parsedSchedule)) {
-                     showFeedback('danger', 'Data harus berupa array JSON.');
-                     return;
-                }
-                saveScheduleToLocalStorage(selectedClass, parsedSchedule);
-                
-                // BARU: Segarkan (render ulang) tampilan jika admin mengedit jadwal yang sedang ditampilkan
-                if (selectedClass === classSelect.value) {
-                    renderSchedule(parsedSchedule, selectedClass);
-                }
-
-            } catch (e) {
-                showFeedback('danger', `Kesalahan format JSON: ${e.message}`);
-                console.error("JSON Parse Error:", e);
-            }
-        });
+        // Event listener: Tombol Simpan Perubahan Jadwal (untuk menyimpan ke localStorage)
+        saveScheduleBtn.addEventListener('click', handleSaveToStorage);
 
     </script>
 </body>
