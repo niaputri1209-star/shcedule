@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Jadwal Kelas Sekolah</title>
+    <title>Sistem Jadwal Kelas Sekolah (Supabase)</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -55,6 +55,14 @@
             border-color: #4299e1;
             outline: none;
         }
+        /* Teks kecil untuk ID pengguna */
+        #user-id-display {
+             position: absolute;
+             top: 5px;
+             left: 0;
+             font-size: 0.75rem;
+             color: #9ca3af;
+        }
     </style>
 </head>
 <body>
@@ -71,7 +79,7 @@
         <!-- Header -->
         <header class="text-center py-6 border-b border-gray-200 relative">
             <h1 class="text-4xl font-extrabold text-blue-700">Sistem Jadwal Kelas</h1>
-            <p class="mt-2 text-lg text-gray-600">Akses jadwal kelas Anda secara real-time.</p>
+            <p class="mt-2 text-lg text-gray-600">Terhubung dengan Supabase Real-time</p>
             <p id="user-id-display" class="mt-1 text-xs text-gray-400"></p>
             
             <!-- Tombol Keluar (Hanya terlihat saat masuk) -->
@@ -153,21 +161,41 @@
 
     </div>
 
-    <!-- Load Firebase SDKs -->
+    <!-- Load Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // --- KONFIGURASI SUPABASE ---
+        // GANTI DENGAN URL DAN KUNCI ANON DARI PROYEK SUPABASE ANDA
+        const SUPABASE_URL = 'https://whpzyuxbyikvxdryiwnd.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndocHp5dXhieWlrdnhkcnlpd25kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzOTU1MjMsImV4cCI6MjA3NTk3MTUyM30.aLjU2p_5oShTHVIIH-2HSDMwl1eTY4xgIqjPgLN39sI';
         
-        setLogLevel('Debug');
+        let supabase;
+        let scheduleChannel = null;
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        let app, db, auth;
-        let userId = null, userClass = null, isAdmin = false;
+        try {
+            if (SUPABASE_URL === 'https://whpzyuxbyikvxdryiwnd.supabase.co' || SUPABASE_ANON_KEY === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndocHp5dXhieWlrdnhkcnlpd25kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzOTU1MjMsImV4cCI6MjA3NTk3MTUyM30.aLjU2p_5oShTHVIIH-2HSDMwl1eTY4xgIqjPgLN39sI' || SUPABASE_URL.includes('example')) {
+                 console.warn("Peringatan: Anda masih menggunakan URL/Kunci Supabase dummy. Aplikasi akan berjalan tetapi TIDAK akan menyimpan data secara permanen atau menggunakan real-time.");
+            }
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                // Konfigurasi agar Supabase tidak bergantung pada autentikasi pengguna untuk operasi publik
+                auth: {
+                    persistSession: false,
+                    autoRefreshToken: false,
+                    detectSessionInUrl: false,
+                }
+            });
+        } catch (e) {
+            console.error(e.message);
+            const feedbackDiv = document.getElementById('feedback-message');
+            if (feedbackDiv) {
+                feedbackDiv.textContent = 'Kesalahan Inisialisasi Supabase. Harap periksa konsol.';
+                feedbackDiv.className = 'p-3 rounded-md mt-4 text-sm w-full transition-opacity duration-300 bg-red-100 text-red-800';
+                feedbackDiv.classList.remove('opacity-0');
+            }
+        }
+        // --- AKHIR KONFIGURASI SUPABASE ---
+
+        let userClass = null, isAdmin = false;
         
         const ADMIN_EMAIL = 'admin@sekolah.edu';
         const ADMIN_CLASS = 'AdminSekolah';
@@ -177,6 +205,7 @@
             'XII-F', 'XII-G', 'XII-H', 'XII-I', 'XII-J', 'XII-K'
         ];
 
+        // --- DOM Elements ---
         const authSection = document.getElementById('auth-section');
         const mainAppSection = document.getElementById('main-app');
         const scheduleDisplay = document.getElementById('schedule-display');
@@ -185,59 +214,33 @@
         const currentClassDisplay = document.getElementById('current-class-display');
         const loadingOverlay = document.getElementById('loading-overlay');
         const feedbackMessage = document.getElementById('feedback-message');
-        const userIdDisplay = document.getElementById('user-id-display');
         const loginClassSelect = document.getElementById('login-class-select');
-        // Tambahkan referensi tombol logout
-        const logoutBtn = document.getElementById('logout-btn'); 
+        const logoutBtn = document.getElementById('logout-btn');
+        const userIdDisplay = document.getElementById('user-id-display');
+        // --- END DOM Elements ---
+        
+        // Simulasikan user ID karena Supabase tidak digunakan untuk autentikasi di sini
+        let simulatedUserId = localStorage.getItem('simulatedUserId') || crypto.randomUUID();
+        localStorage.setItem('simulatedUserId', simulatedUserId);
+        userIdDisplay.textContent = `ID Sesi (Debug): ${simulatedUserId}`;
 
-        let unsubscribeSchedule = () => {};
 
-        const initFirebase = async () => {
-            if (!Object.keys(firebaseConfig).length) {
-                console.error("Firebase config is missing.");
-                showFeedback('danger', 'Kesalahan: Konfigurasi Firebase tidak ditemukan.');
-                return;
-            }
-
-            try {
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                loginClassSelect.innerHTML = XII_CLASSES.map(cls => 
-                    `<option value="${cls}">${cls}</option>`
-                ).join('') + `<option value="${ADMIN_CLASS}">AdminSekolah</option>`;
-
-                if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
-                else await signInAnonymously(auth);
-
-                onAuthStateChanged(auth, (user) => {
-                    loadingOverlay.classList.add('hidden');
-                    if (user) {
-                        userId = user.uid;
-                        userIdDisplay.textContent = `ID Pengguna (Debug): ${userId}`;
-                        const storedClass = localStorage.getItem('userClass');
-                        const storedEmail = localStorage.getItem('userEmail');
-                        
-                        if (storedClass && storedEmail) {
-                            userClass = storedClass;
-                            const email = storedEmail;
-                            isAdmin = (email === ADMIN_EMAIL && userClass === ADMIN_CLASS);
-                            showMainApp();
-                        } else {
-                            showAuthSection();
-                        }
-                    } else {
-                        userId = crypto.randomUUID();
-                        userIdDisplay.textContent = `ID Pengguna (Anonim): ${userId}`;
-                        showAuthSection();
-                    }
-                });
-
-            } catch (error) {
-                console.error("Error during Firebase initialization:", error);
-                loadingOverlay.classList.add('hidden');
-                showFeedback('danger', `Gagal inisialisasi: ${error.message}`);
+        const initApp = () => {
+            loadingOverlay.classList.add('hidden');
+            
+            loginClassSelect.innerHTML = XII_CLASSES.map(cls => 
+                `<option value="${cls}">${cls}</option>`
+            ).join('') + `<option value="${ADMIN_CLASS}">AdminSekolah</option>`;
+            
+            const storedClass = localStorage.getItem('userClass');
+            const storedEmail = localStorage.getItem('userEmail');
+            
+            if (storedClass && storedEmail) {
+                userClass = storedClass;
+                isAdmin = (storedEmail === ADMIN_EMAIL && userClass === ADMIN_CLASS);
+                showMainApp();
+            } else {
+                showAuthSection();
             }
         };
 
@@ -254,16 +257,14 @@
         const showAuthSection = () => {
             authSection.classList.remove('hidden');
             mainAppSection.classList.add('hidden');
-            // Sembunyikan tombol keluar
-            logoutBtn.classList.add('hidden'); 
+            logoutBtn.classList.add('hidden');
         };
 
         const showMainApp = () => {
             authSection.classList.add('hidden');
             mainAppSection.classList.remove('hidden');
-            // Tampilkan tombol keluar
-            logoutBtn.classList.remove('hidden'); 
-            
+            logoutBtn.classList.remove('hidden');
+
             if (isAdmin) {
                 adminPanel.classList.remove('hidden');
                 document.getElementById('admin-toggle-btn').classList.remove('hidden');
@@ -276,9 +277,11 @@
             startScheduleListener(userClass);
         };
         
-        // --- Handler Logout ---
         const handleLogout = () => {
-            unsubscribeSchedule();
+            if (scheduleChannel) {
+                supabase.removeChannel(scheduleChannel);
+                scheduleChannel = null;
+            }
             localStorage.removeItem('userEmail');
             localStorage.removeItem('userClass');
             userClass = null;
@@ -288,17 +291,11 @@
         };
 
         logoutBtn.addEventListener('click', handleLogout);
-        // --- Akhir Handler Logout ---
 
         document.getElementById('login-form').addEventListener('submit', (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value.trim();
             const selectedClass = document.getElementById('login-class-select').value;
-
-            if (!email || !selectedClass) {
-                showFeedback('danger', 'Email dan Kelas harus diisi.');
-                return;
-            }
 
             localStorage.setItem('userEmail', email);
             localStorage.setItem('userClass', selectedClass);
@@ -308,7 +305,7 @@
             showFeedback('success', `Berhasil masuk sebagai ${userClass}.`);
         });
 
-        const loadClassNames = async () => {
+        const loadClassNames = () => {
             classSelect.innerHTML = XII_CLASSES.map(cls => 
                 `<option value="${cls}" ${cls === userClass ? 'selected' : ''}>${cls}</option>`
             ).join('');
@@ -346,39 +343,67 @@
             { day: "Jumat", time: "11:45 - 12:45", subject: "Ekonomi", teacher: "Bpk. Yoga" },
         ];
 
-        const startScheduleListener = (className) => {
-            unsubscribeSchedule();
+        // --- Supabase: Fetching Data & Real-time Listener ---
+        const fetchSchedule = async (className) => {
+            const { data, error } = await supabase
+                .from('schedules')
+                .select('schedule_data')
+                .eq('class_name', className)
+                .maybeSingle();
+
+            if (error) {
+                console.error("Supabase fetch error:", error);
+                return defaultSchedule;
+            }
+
+            return data ? (data.schedule_data || defaultSchedule) : defaultSchedule;
+        };
+
+        const startScheduleListener = async (className) => {
+            // Hapus listener sebelumnya jika ada
+            if (scheduleChannel) {
+                supabase.removeChannel(scheduleChannel);
+                scheduleChannel = null;
+            }
             if (!className) return;
 
             currentClassDisplay.textContent = className;
             loadingOverlay.classList.remove('hidden');
 
-            const scheduleRef = doc(db, `artifacts/${appId}/public/data/schedules/${className}`);
-            
-            unsubscribeSchedule = onSnapshot(scheduleRef, (docSnap) => {
-                loadingOverlay.classList.add('hidden');
-                let schedule = docSnap.exists() ? (docSnap.data().schedule || defaultSchedule) : defaultSchedule;
-                
-                if (docSnap.exists()) {
-                    showFeedback('success', `Jadwal Kelas ${className} berhasil diperbarui secara real-time.`);
-                } else {
-                    showFeedback('info', `Jadwal Kelas ${className} belum tersedia, menampilkan data default.`);
-                }
-                
-                renderSchedule(schedule, className);
-                
-                // Jika admin, pastikan editor admin diperbarui jika kelas yang sama dilihat
-                if (isAdmin && document.getElementById('admin-class-select').value === className) {
-                    renderAdminEditor(schedule);
-                }
-            }, (error) => {
-                console.error("Error fetching schedule:", error);
-                loadingOverlay.classList.add('hidden');
-                showFeedback('danger', 'Gagal memuat jadwal. Cek koneksi Anda.');
-            });
+            // 1. Ambil data awal
+            let schedule = await fetchSchedule(className);
+            loadingOverlay.classList.add('hidden');
+            renderSchedule(schedule, className);
+            showFeedback('info', `Jadwal Kelas ${className} dimuat. Menunggu pembaruan real-time...`);
+
+
+            // 2. Siapkan listener Real-time (Supabase Postgres Changes)
+            scheduleChannel = supabase
+                .channel(`schedule_changes:${className}`)
+                .on('postgres_changes', 
+                    { 
+                        event: 'UPDATE', 
+                        schema: 'public', 
+                        table: 'schedules',
+                        filter: `class_name=eq.${className}`
+                    }, 
+                    (payload) => {
+                        console.log('Real-time Update Received:', payload);
+                        const updatedSchedule = payload.new.schedule_data || defaultSchedule;
+                        renderSchedule(updatedSchedule, className);
+                        showFeedback('success', `Jadwal Kelas ${className} berhasil diperbarui secara real-time.`);
+                        
+                        // Perbarui editor admin jika kelas yang sama sedang dilihat di panel admin
+                        if (isAdmin && document.getElementById('admin-class-select').value === className) {
+                            renderAdminEditor(updatedSchedule);
+                        }
+                    }
+                )
+                .subscribe();
         };
 
         const renderSchedule = (scheduleData, className) => {
+            // (Logika rendering sama dengan sebelumnya)
             const daysOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
             const grouped = scheduleData.reduce((acc, item) => {
                 (acc[item.day] = acc[item.day] || []).push(item);
@@ -419,19 +444,17 @@
         
         const populateAdminClassDropdown = async () => {
              const adminClassSelect = document.getElementById('admin-class-select');
-             // Admin harus dapat mengedit semua kelas XII
              const classesToEdit = XII_CLASSES; 
              adminClassSelect.innerHTML = `<option value="">-- Pilih Kelas yang Akan Diubah --</option>` +
                  classesToEdit.map(cls => `<option value="${cls}">${cls}</option>`).join('');
                  
-             // Pilih kelas yang sedang dilihat jika itu adalah kelas XII
              if (userClass && classesToEdit.includes(userClass)) {
                  adminClassSelect.value = userClass; 
              }
         };
 
-        // --- Render Admin Editor UI ---
         const renderAdminEditor = (scheduleData) => {
+            // (Logika rendering editor admin sama dengan sebelumnya)
             const editorUI = document.getElementById('admin-schedule-editor-ui');
             const daysOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat"];
             const grouped = scheduleData.reduce((acc, item) => {
@@ -441,16 +464,12 @@
 
             let html = '';
             
-            // Urutkan defaultSchedule berdasarkan waktu untuk mendapatkan urutan slot yang benar
             const sortedDefaultSchedule = [...defaultSchedule].sort((a, b) => a.time.localeCompare(b.time));
-            
-            // Dapatkan semua slot waktu unik yang ada di defaultSchedule
             const uniqueTimeSlots = [...new Set(sortedDefaultSchedule.map(item => item.time))];
 
             daysOrder.forEach(day => {
                 const dailySchedule = grouped[day] || [];
                 
-                // Buat peta cepat untuk lookup jadwal yang ada berdasarkan waktu
                 const scheduleMap = dailySchedule.reduce((map, item) => {
                     map[item.time] = item;
                     return map;
@@ -468,9 +487,7 @@
                         </thead>
                         <tbody>`;
                 
-                // Iterasi berdasarkan slot waktu unik (memastikan semua slot waktu ada)
                 uniqueTimeSlots.forEach(timeSlot => {
-                    // Coba temukan item untuk hari dan waktu ini
                     const item = scheduleMap[timeSlot] || { subject: '', teacher: '' };
 
                     html += `
@@ -495,12 +512,10 @@
                 return;
             }
             
-            const scheduleRef = doc(db, `artifacts/${appId}/public/data/schedules/${newClass}`);
             loadingOverlay.classList.remove('hidden');
             try {
-                const docSnap = await getDoc(scheduleRef);
+                const schedule = await fetchSchedule(newClass);
                 loadingOverlay.classList.add('hidden');
-                const schedule = docSnap.exists() ? (docSnap.data().schedule || defaultSchedule) : defaultSchedule;
                 renderAdminEditor(schedule);
                 showFeedback('info', `Jadwal Kelas ${newClass} dimuat di panel editor.`);
             } catch (error) {
@@ -511,6 +526,7 @@
             }
         });
 
+        // --- Supabase: Saving Data (Admin) ---
         document.getElementById('save-schedule-btn').addEventListener('click', async () => {
             const targetClass = document.getElementById('admin-class-select').value;
             if (!targetClass) {
@@ -518,7 +534,6 @@
                 return;
             }
 
-            // --- Kumpulkan data dari UI (Perbaikan) ---
             const newScheduleData = [];
             const editorRows = document.querySelectorAll('#admin-schedule-editor-ui tr[data-day]');
             
@@ -528,12 +543,11 @@
                 const subjectInput = row.querySelector('input[data-field="subject"]');
                 const teacherInput = row.querySelector('input[data-field="teacher"]');
 
-                // Hanya simpan item jika setidaknya Mata Pelajaran atau Guru terisi
                 if (day && time && subjectInput && teacherInput) {
                     const subject = subjectInput.value.trim();
                     const teacher = teacherInput.value.trim();
                     
-                    if (subject || teacher) { // Hanya simpan jika ada konten
+                    if (subject || teacher) { 
                         newScheduleData.push({
                             day: day,
                             time: time,
@@ -545,15 +559,21 @@
             });
 
             if (newScheduleData.length === 0) {
-                showFeedback('info', 'Tidak ada data jadwal yang valid untuk disimpan.');
-                // Admin mungkin ingin menghapus jadwal. Kita akan simpan data kosong.
+                 showFeedback('info', 'Data yang disimpan kosong.');
             }
 
             loadingOverlay.classList.remove('hidden');
             try {
-                const docRef = doc(db, `artifacts/${appId}/public/data/schedules/${targetClass}`);
-                // Simpan data, yang bisa berupa array kosong jika semua dihapus
-                await setDoc(docRef, { schedule: newScheduleData }); 
+                // Gunakan upsert untuk memasukkan data baru atau memperbarui yang sudah ada
+                const { error } = await supabase
+                    .from('schedules')
+                    .upsert({ 
+                        class_name: targetClass, 
+                        schedule_data: newScheduleData 
+                    }, { onConflict: 'class_name' });
+                    
+                if (error) throw error;
+                
                 showFeedback('success', `Jadwal untuk Kelas ${targetClass} berhasil disimpan.`);
             } catch (error) {
                 console.error("Error saving schedule:", error);
@@ -572,25 +592,21 @@
             }
         });
 
-        initFirebase();
-        
         document.getElementById('admin-toggle-btn').addEventListener('click', () => {
             adminPanel.classList.toggle('hidden');
             if (!adminPanel.classList.contains('hidden')) {
                 const adminSelect = document.getElementById('admin-class-select');
                 
-                // Jika userClass adalah salah satu kelas yang dapat diedit, pilih kelas tersebut
                 if(userClass && XII_CLASSES.includes(userClass)) {
                     adminSelect.value = userClass;
                 } else {
-                    // Jika login sebagai AdminSekolah, pastikan dropdown defaultnya tidak kosong
-                    // atau muat kelas pertama
                     adminSelect.value = adminSelect.options[1]?.value || ''; 
                 }
                 adminSelect.dispatchEvent(new Event('change'));
             }
         });
 
+        initApp(); // Mulai aplikasi setelah Supabase diinisialisasi
     </script>
 </body>
 </html>
