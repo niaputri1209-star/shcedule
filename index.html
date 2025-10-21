@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Jadwal Kelas Sekolah (Offline)</title>
+    <title>Sistem Jadwal Kelas Sekolah</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -39,19 +39,28 @@
         .schedule-table th, .schedule-table td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #e5e7eb;
         }
-        .schedule-table th {
-            background-color: #eff6ff;
-            font-weight: 600;
-            color: #1f2937;
+        /* Styling khusus untuk input di editor admin */
+        .admin-edit-table input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #4a5568;
+            background-color: #2d3748;
+            color: #e2e8f0;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .admin-edit-table input:focus {
+            background-color: #1a202c;
+            border-color: #4299e1;
+            outline: none;
         }
     </style>
 </head>
 <body>
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay hidden">
+    <div id="loading-overlay" class="loading-overlay">
         <div class="spinner"></div>
         <p class="ml-4 text-gray-700 font-medium">Memuat...</p>
     </div>
@@ -60,9 +69,15 @@
     <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
         
         <!-- Header -->
-        <header class="text-center py-6 border-b border-gray-200">
+        <header class="text-center py-6 border-b border-gray-200 relative">
             <h1 class="text-4xl font-extrabold text-blue-700">Sistem Jadwal Kelas</h1>
-            <p class="mt-2 text-lg text-gray-600">Akses jadwal kelas Anda secara offline.</p>
+            <p class="mt-2 text-lg text-gray-600">Akses jadwal kelas Anda secara real-time.</p>
+            <p id="user-id-display" class="mt-1 text-xs text-gray-400"></p>
+            
+            <!-- Tombol Keluar (Hanya terlihat saat masuk) -->
+            <button id="logout-btn" class="absolute top-6 right-0 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition duration-150 shadow-md hidden">
+                Keluar
+            </button>
         </header>
 
         <!-- Feedback Message -->
@@ -93,21 +108,17 @@
         <section id="main-app" class="hidden mt-10">
             
             <!-- Kontrol User Biasa -->
-            <div class="bg-white p-6 rounded-xl shadow-md mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div class="text-lg font-medium text-gray-700 text-center sm:text-left">
+            <div class="bg-white p-6 rounded-xl shadow-md mb-8 flex flex-col sm:flex-row justify-between items-center">
+                <div class="text-lg font-medium text-gray-700 mb-4 sm:mb-0">
                     Anda melihat jadwal untuk kelas: <span id="current-class-display" class="font-bold text-blue-600"></span>
                 </div>
-                <div class="flex items-center space-x-3 w-full sm:w-auto justify-center">
+                <div class="flex items-center space-x-3 w-full sm:w-auto">
                     <label for="class-select" class="text-sm font-medium text-gray-700 hidden sm:block">Ganti Kelas:</label>
-                    <select id="class-select" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm w-auto">
+                    <select id="class-select" class="px-3 py-1 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm w-full sm:w-40">
                         <!-- Opsi kelas akan diisi oleh JS -->
                     </select>
-                    <button id="admin-toggle-btn" class="hidden bg-yellow-500 text-white p-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition duration-150 whitespace-nowrap">
+                    <button id="admin-toggle-btn" class="hidden bg-yellow-500 text-white p-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition duration-150">
                         Panel Admin
-                    </button>
-                    <!-- Tombol Log Out Baru -->
-                    <button id="logout-btn" class="bg-red-500 text-white p-2 rounded-lg text-sm font-medium hover:bg-red-600 transition duration-150">
-                        Log Out
                     </button>
                 </div>
             </div>
@@ -128,90 +139,44 @@
                     </select>
                 </div>
 
-                <!-- Konten Editor Jadwal Berbasis Tabel -->
-                <div class="space-y-6">
-                    <!-- Form Tambah Entri Baru -->
-                    <div class="bg-gray-700 p-4 rounded-lg shadow-inner">
-                        <h3 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Tambah Mata Pelajaran</h3>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div>
-                                <label for="editor-day" class="block text-xs font-medium text-gray-400">Hari</label>
-                                <select id="editor-day" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm">
-                                    <option value="Senin">Senin</option>
-                                    <option value="Selasa">Selasa</option>
-                                    <option value="Rabu">Rabu</option>
-                                    <option value="Kamis">Kamis</option>
-                                    <option value="Jumat">Jumat</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label for="editor-time" class="block text-xs font-medium text-gray-400">Waktu (ex: 07:30 - 08:30)</label>
-                                <input type="text" id="editor-time" placeholder="07:30 - 08:30" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm" />
-                            </div>
-                            <div>
-                                <label for="editor-subject" class="block text-xs font-medium text-gray-400">Mata Pelajaran</label>
-                                <input type="text" id="editor-subject" placeholder="Matematika" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm" />
-                            </div>
-                            <div>
-                                <label for="editor-teacher" class="block text-xs font-medium text-gray-400">Guru</label>
-                                <input type="text" id="editor-teacher" placeholder="Bpk. Guru" class="mt-1 block w-full p-2 border border-gray-600 bg-gray-800 rounded-lg text-white text-sm" />
-                            </div>
-                        </div>
-                        <button id="add-schedule-btn" class="mt-4 w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition duration-150">
-                            Tambah Jadwal ke Editor
-                        </button>
-                    </div>
-
-                    <!-- Area Editor Tabel -->
-                    <div class="bg-gray-700 p-4 rounded-lg shadow-inner max-h-[500px] overflow-y-auto">
-                        <h3 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Daftar Jadwal Kelas (Klik ikon edit untuk mengubah)</h3>
-                        <table class="w-full text-left text-sm">
-                            <thead class="sticky top-0 bg-gray-800 text-gray-300">
-                                <tr>
-                                    <th class="p-2 w-1/12">No.</th>
-                                    <th class="p-2 w-2/12">Hari</th>
-                                    <th class="p-2 w-2/12">Waktu</th>
-                                    <th class="p-2 w-3/12">Pelajaran</th>
-                                    <th class="p-2 w-3/12">Guru</th>
-                                    <th class="p-2 w-1/12 text-center">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody id="schedule-editor-table">
-                                <!-- Isi tabel editor akan di-render di sini -->
-                            </tbody>
-                        </table>
-                    </div>
+                <!-- Antarmuka Pengeditan Jadwal Baru -->
+                <div id="admin-schedule-editor-ui" class="space-y-6 mt-6">
+                    <p class="text-gray-400 text-center">Pilih kelas dari dropdown di atas untuk mulai mengedit jadwal.</p>
                 </div>
 
-                <button id="save-schedule-btn" class="mt-6 w-full py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150">
-                    Simpan Perubahan Jadwal ke Penyimpanan Lokal
+                <button id="save-schedule-btn" class="mt-8 w-full py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150">
+                    Simpan Perubahan Jadwal
                 </button>
-                <!-- Tombol Simpan Jadwal Lama dihapus -->
-
             </div>
 
         </section>
 
     </div>
 
-    <!-- Script Aplikasi -->
+    <!-- Load Firebase SDKs -->
     <script type="module">
-        let userClass = null;
-        let isAdmin = false;
-        let currentEditingSchedule = []; // State untuk jadwal yang sedang diedit
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        setLogLevel('Debug');
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        let app, db, auth;
+        let userId = null, userClass = null, isAdmin = false;
         
         const ADMIN_EMAIL = 'admin@sekolah.edu';
-        const ADMIN_CLASS = 'AdminSekolah'; 
+        const ADMIN_CLASS = 'AdminSekolah';
 
         const XII_CLASSES = [
             'XII-A', 'XII-B', 'XII-C', 'XII-D', 'XII-E', 
             'XII-F', 'XII-G', 'XII-H', 'XII-I', 'XII-J', 'XII-K'
         ];
-        
-        const DAY_ORDER = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
-        const SCHEDULE_STORAGE_KEY = 'schoolSchedulesData';
 
-        // Referensi DOM
         const authSection = document.getElementById('auth-section');
         const mainAppSection = document.getElementById('main-app');
         const scheduleDisplay = document.getElementById('schedule-display');
@@ -220,84 +185,59 @@
         const currentClassDisplay = document.getElementById('current-class-display');
         const loadingOverlay = document.getElementById('loading-overlay');
         const feedbackMessage = document.getElementById('feedback-message');
+        const userIdDisplay = document.getElementById('user-id-display');
         const loginClassSelect = document.getElementById('login-class-select');
-        const adminClassSelect = document.getElementById('admin-class-select');
-        
-        // Referensi DOM Editor Baru
-        const editorDay = document.getElementById('editor-day');
-        const editorTime = document.getElementById('editor-time');
-        const editorSubject = document.getElementById('editor-subject');
-        const editorTeacher = document.getElementById('editor-teacher');
-        const addScheduleBtn = document.getElementById('add-schedule-btn');
-        const scheduleEditorTable = document.getElementById('schedule-editor-table');
-        const saveScheduleBtn = document.getElementById('save-schedule-btn');
+        // Tambahkan referensi tombol logout
+        const logoutBtn = document.getElementById('logout-btn'); 
 
-        // --- FUNGSI PENYIMPANAN LOKAL (LOCALSTORAGE) ---
+        let unsubscribeSchedule = () => {};
 
-        /** Mengambil semua jadwal dari localStorage */
-        const getSchedulesFromStorage = () => {
-            const data = localStorage.getItem(SCHEDULE_STORAGE_KEY);
-            try {
-                return data ? JSON.parse(data) : {};
-            } catch (e) {
-                console.error("Gagal mem-parsing data jadwal dari localStorage:", e);
-                return {};
+        const initFirebase = async () => {
+            if (!Object.keys(firebaseConfig).length) {
+                console.error("Firebase config is missing.");
+                showFeedback('danger', 'Kesalahan: Konfigurasi Firebase tidak ditemukan.');
+                return;
             }
-        };
-        
-        /** Menyimpan semua jadwal ke localStorage */
-        const setSchedulesToStorage = (schedules) => {
+
             try {
-                localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules));
-            } catch (e) {
-                console.error("Gagal menyimpan jadwal ke localStorage:", e);
-            }
-        };
-        
-        /** Menyimpan jadwal untuk satu kelas spesifik */
-        const saveScheduleToLocalStorage = (className, scheduleData) => {
-            loadingOverlay.classList.remove('hidden');
-            const allSchedules = getSchedulesFromStorage();
-            allSchedules[className] = scheduleData;
-            setSchedulesToStorage(allSchedules);
-            
-            setTimeout(() => { // Simulasi proses penyimpanan
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                loginClassSelect.innerHTML = XII_CLASSES.map(cls => 
+                    `<option value="${cls}">${cls}</option>`
+                ).join('') + `<option value="${ADMIN_CLASS}">AdminSekolah</option>`;
+
+                if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                else await signInAnonymously(auth);
+
+                onAuthStateChanged(auth, (user) => {
+                    loadingOverlay.classList.add('hidden');
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = `ID Pengguna (Debug): ${userId}`;
+                        const storedClass = localStorage.getItem('userClass');
+                        const storedEmail = localStorage.getItem('userEmail');
+                        
+                        if (storedClass && storedEmail) {
+                            userClass = storedClass;
+                            const email = storedEmail;
+                            isAdmin = (email === ADMIN_EMAIL && userClass === ADMIN_CLASS);
+                            showMainApp();
+                        } else {
+                            showAuthSection();
+                        }
+                    } else {
+                        userId = crypto.randomUUID();
+                        userIdDisplay.textContent = `ID Pengguna (Anonim): ${userId}`;
+                        showAuthSection();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error during Firebase initialization:", error);
                 loadingOverlay.classList.add('hidden');
-                showFeedback('success', `Jadwal Kelas ${className} berhasil disimpan di peramban.`);
-            }, 300);
-        };
-        
-        /** Memuat jadwal ke editor admin (mode tabel) */
-        const loadScheduleToEditor = (className) => {
-            loadingOverlay.classList.remove('hidden');
-            const allSchedules = getSchedulesFromStorage();
-            const schedule = allSchedules[className] || defaultSchedule;
-            
-            // Simpan ke state untuk diedit (deep copy agar aman)
-            currentEditingSchedule = JSON.parse(JSON.stringify(schedule)); 
-            
-            renderEditableSchedule(currentEditingSchedule);
-            loadingOverlay.classList.add('hidden');
-        };
-
-        // --- FUNGSI UI & ALUR APLIKASI ---
-
-        const initApp = () => {
-            // Isi dropdown kelas di form login
-            loginClassSelect.innerHTML = XII_CLASSES.map(cls => 
-                `<option value="${cls}">${cls}</option>`
-            ).join('') + `<option value="${ADMIN_CLASS}">AdminSekolah</option>`;
-            
-            // Cek sesi dari localStorage
-            const storedClass = localStorage.getItem('userClass');
-            const storedEmail = localStorage.getItem('userEmail');
-            
-            if (storedClass && storedEmail) {
-                userClass = storedClass;
-                isAdmin = (storedEmail === ADMIN_EMAIL && userClass === ADMIN_CLASS);
-                showMainApp();
-            } else {
-                showAuthSection(); 
+                showFeedback('danger', `Gagal inisialisasi: ${error.message}`);
             }
         };
 
@@ -305,39 +245,51 @@
             feedbackMessage.textContent = message;
             feedbackMessage.className = `p-3 rounded-md mt-4 text-sm w-full transition-opacity duration-300 ${
                 type === 'success' ? 'bg-green-100 text-green-800' :
-                type === 'danger' ? 'bg-red-100 text-red-800' :
-                'bg-blue-100 text-blue-800'
+                type === 'danger' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
             }`;
             feedbackMessage.classList.remove('opacity-0');
-            setTimeout(() => {
-                feedbackMessage.classList.add('opacity-0');
-            }, 5000);
+            setTimeout(() => feedbackMessage.classList.add('opacity-0'), 5000);
         };
 
         const showAuthSection = () => {
             authSection.classList.remove('hidden');
             mainAppSection.classList.add('hidden');
+            // Sembunyikan tombol keluar
+            logoutBtn.classList.add('hidden'); 
         };
 
         const showMainApp = () => {
             authSection.classList.add('hidden');
             mainAppSection.classList.remove('hidden');
-            const adminToggleBtn = document.getElementById('admin-toggle-btn');
+            // Tampilkan tombol keluar
+            logoutBtn.classList.remove('hidden'); 
             
             if (isAdmin) {
                 adminPanel.classList.remove('hidden');
-                adminToggleBtn.classList.remove('hidden');
+                document.getElementById('admin-toggle-btn').classList.remove('hidden');
                 populateAdminClassDropdown();
             } else {
                 adminPanel.classList.add('hidden');
-                adminToggleBtn.classList.add('hidden');
+                document.getElementById('admin-toggle-btn').classList.add('hidden');
             }
-            
             loadClassNames();
-            loadAndDisplaySchedule(userClass);
+            startScheduleListener(userClass);
         };
         
-        // Handle Form Login
+        // --- Handler Logout ---
+        const handleLogout = () => {
+            unsubscribeSchedule();
+            localStorage.removeItem('userEmail');
+            localStorage.removeItem('userClass');
+            userClass = null;
+            isAdmin = false;
+            showFeedback('info', 'Anda telah berhasil keluar. Silakan masuk kembali.');
+            showAuthSection();
+        };
+
+        logoutBtn.addEventListener('click', handleLogout);
+        // --- Akhir Handler Logout ---
+
         document.getElementById('login-form').addEventListener('submit', (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value.trim();
@@ -350,376 +302,294 @@
 
             localStorage.setItem('userEmail', email);
             localStorage.setItem('userClass', selectedClass);
-            
             userClass = selectedClass;
             isAdmin = (email === ADMIN_EMAIL && userClass === ADMIN_CLASS);
-            
             showMainApp();
             showFeedback('success', `Berhasil masuk sebagai ${userClass}.`);
         });
 
-        const loadClassNames = () => {
-            const allClasses = XII_CLASSES;
-            classSelect.innerHTML = allClasses.map(cls => 
+        const loadClassNames = async () => {
+            classSelect.innerHTML = XII_CLASSES.map(cls => 
                 `<option value="${cls}" ${cls === userClass ? 'selected' : ''}>${cls}</option>`
             ).join('');
         };
 
-        const populateAdminClassDropdown = () => {
-            const allClasses = XII_CLASSES;
-            adminClassSelect.innerHTML = allClasses.map(cls => 
-                `<option value="${cls}">${cls}</option>`
-            ).join('');
-            
-            if (userClass && userClass !== ADMIN_CLASS) {
-                 adminClassSelect.value = userClass;
-            } else {
-                adminClassSelect.value = 'XII-A';
-            }
-            loadScheduleToEditor(adminClassSelect.value);
-        };
-        
-        // Data Jadwal Default
         const defaultSchedule = [
-            { day: "Senin", time: "07:30 - 08:30", subject: "Upacara", teacher: "Bpk. Bambang" },
-            { day: "Senin", time: "08:30 - 09:30", subject: "B. Indonesia", teacher: "Ibu Astri" },
-            { day: "Senin", time: "09:30 - 09:45", subject: "Istirahat", teacher: "-" },
-            { day: "Senin", time: "09:45 - 10:45", subject: "B. Inggris", teacher: "Mam Nopri" },
-            { day: "Senin", time: "10:45 - 11:45", subject: "Ekonomi", teacher: "Ibu Rena" },
-            { day: "Senin", time: "11:45 - 12:45", subject: "Ekonomi", teacher: "Ibu Rena" },
-            { day: "Selasa", time: "07:30 - 08:30", subject: "PPKN", teacher: "Pak Chandra" },
-            { day: "Selasa", time: "08:30 - 09:30", subject: "PPKN", teacher: "Pak Chandra" },
-            { day: "Selasa", time: "09:30 - 09:45", subject: "Istirahat", teacher: "-" },
-            { day: "Selasa", time: "09:45 - 10:45", subject: "B. Sunda", teacher: "Ibu Ani" },
-            { day: "Selasa", time: "10:45 - 11:45", subject: "Informatika", teacher: "Pak Dodi" },
-            { day: "Selasa", time: "11:45 - 12:45", subject: "Informatika", teacher: "Pak Dodi" },
-            { day: "Rabu", time: "07:30 - 08:30", subject: "Sejarah", teacher: "Pak Marda" },
-            { day: "Rabu", time: "08:30 - 09:30", subject: "Sejarah", teacher: "Pak Marda" },
-            { day: "Rabu", time: "09:30 - 09:45", subject: "Istirahat", teacher: "-" },
-            { day: "Rabu", time: "09:45 - 10:45", subject: "Biologi", teacher: "Ibu Tricia" },
-            { day: "Rabu", time: "10:45 - 11:45", subject: "MTK Wajib", teacher: "Pak Endang" },
-            { day: "Rabu", time: "11:45 - 12:45", subject: "MTK Wajib", teacher: "Pak Endang" },
-            { day: "Kamis", time: "07:30 - 08:30", subject: "PAI", teacher: "Pak Iyus" },
-            { day: "Kamis", time: "08:30 - 09:30", subject: "Seni Budaya", teacher: "Pak Noval" },
-            { day: "Kamis", time: "09:30 - 09:45", subject: "Istirahat", teacher: "-" },
-            { day: "Kamis", time: "09:45 - 10:45", subject: "Biologi", teacher: "Ibu Tricia" },
-            { day: "Kamis", time: "10:45 - 11:45", subject: "Matwa", teacher: "Ibu Fitri" },
-            { day: "Kamis", time: "11:45 - 12:45", subject: "Matwa", teacher: "Ibu Fitri" },
-            { day: "Jumat", time: "07:30 - 08:30", subject: "Penjasorkes", teacher: "Ibu Dela" },
-            { day: "Jumat", time: "08:30 - 09:30", subject: "Penjasorkes", teacher: "Ibu Dela" },
-            { day: "Jumat", time: "09:30 - 09:45", subject: "Istirahat", teacher: "-" },
-            { day: "Jumat", time: "09:45 - 10:45", subject: "PKWU", teacher: "Ibu Ajeng" },
-            { day: "Jumat", time: "10:45 - 11:45", subject: "P5", teacher: "Fasilitator" },
-            { day: "Jumat", time: "11:45 - 12:45", subject: "P5", teacher: "Fasilitator" },
+            { day: "Senin", time: "07:30 - 08:30", subject: "Matematika Wajib", teacher: "Bpk. Rahmat" },
+            { day: "Senin", time: "08:30 - 09:30", subject: "B. Indonesia", teacher: "Ibu Siti" },
+            { day: "Senin", time: "09:45 - 10:45", subject: "Biologi", teacher: "Ibu Dian" },
+            { day: "Senin", time: "10:45 - 11:45", subject: "Seni Budaya", teacher: "Bpk. Agung" },
+            { day: "Senin", time: "11:45 - 12:45", subject: "Penjasorkes", teacher: "Bpk. Tedi" },
+            
+            { day: "Selasa", time: "07:30 - 08:30", subject: "Fisika", teacher: "Bpk. Budi" },
+            { day: "Selasa", time: "08:30 - 09:30", subject: "Sejarah Indonesia", teacher: "Ibu Rina" },
+            { day: "Selasa", time: "09:45 - 10:45", subject: "Matematika Minat", teacher: "Bpk. Rahmat" },
+            { day: "Selasa", time: "10:45 - 11:45", subject: "B. Inggris", teacher: "Ibu Ani" },
+            { day: "Selasa", time: "11:45 - 12:45", subject: "Kimia", teacher: "Ibu Maya" },
+
+            { day: "Rabu", time: "07:30 - 08:30", subject: "Ekonomi", teacher: "Bpk. Yoga" },
+            { day: "Rabu", time: "08:30 - 09:30", subject: "Geografi", teacher: "Ibu Wulan" },
+            { day: "Rabu", time: "09:45 - 10:45", subject: "B. Indonesia", teacher: "Ibu Siti" },
+            { day: "Rabu", time: "10:45 - 11:45", subject: "Informatika", teacher: "Bpk. Dani" },
+            { day: "Rabu", time: "11:45 - 12:45", subject: "Biologi", teacher: "Ibu Dian" },
+
+            { day: "Kamis", time: "07:30 - 08:30", subject: "Matematika Wajib", teacher: "Bpk. Rahmat" },
+            { day: "Kamis", time: "08:30 - 09:30", subject: "Fisika", teacher: "Bpk. Budi" },
+            { day: "Kamis", time: "09:45 - 10:45", subject: "Sejarah Peminatan", teacher: "Ibu Rina" },
+            { day: "Kamis", time: "10:45 - 11:45", subject: "B. Inggris", teacher: "Ibu Ani" },
+            { day: "Kamis", time: "11:45 - 12:45", subject: "Seni Budaya", teacher: "Bpk. Agung" },
+            
+            { day: "Jumat", time: "07:30 - 08:30", subject: "Penjasorkes", teacher: "Bpk. Tedi" },
+            { day: "Jumat", time: "08:30 - 09:30", subject: "Informatika", teacher: "Bpk. Dani" },
+            { day: "Jumat", time: "09:45 - 10:45", subject: "Pendidikan Agama", teacher: "Ibu Linda" },
+            { day: "Jumat", time: "10:45 - 11:45", subject: "Geografi", teacher: "Ibu Wulan" },
+            { day: "Jumat", time: "11:45 - 12:45", subject: "Ekonomi", teacher: "Bpk. Yoga" },
         ];
 
-        /** Merender data jadwal ke editor tabel admin */
-        const renderEditableSchedule = (schedule) => {
-            scheduleEditorTable.innerHTML = '';
-
-            // Urutkan jadwal berdasarkan urutan hari
-            schedule.sort((a, b) => {
-                const dayA = DAY_ORDER.indexOf(a.day);
-                const dayB = DAY_ORDER.indexOf(b.day);
-                if (dayA !== dayB) {
-                    return dayA - dayB;
-                }
-                // Jika hari sama, urutkan berdasarkan waktu
-                return a.time.localeCompare(b.time); 
-            });
-            
-            if (schedule.length === 0) {
-                scheduleEditorTable.innerHTML = '<tr><td colspan="6" class="p-3 text-center text-gray-400">Belum ada entri jadwal.</td></tr>';
-                return;
-            }
-
-            schedule.forEach((item, index) => {
-                const row = scheduleEditorTable.insertRow();
-                row.className = 'border-t border-gray-600 hover:bg-gray-800 transition duration-100';
-                
-                // No
-                row.insertCell().textContent = index + 1;
-                row.cells[0].className = 'p-2 text-gray-400';
-
-                // Day (Index 1)
-                const dayCell = row.insertCell();
-                dayCell.innerHTML = `<span data-field="day">${item.day}</span>`;
-                dayCell.className = 'p-2 font-medium';
-
-                // Time (Index 2)
-                const timeCell = row.insertCell();
-                timeCell.innerHTML = `<span data-field="time">${item.time}</span>`;
-                timeCell.className = 'p-2 font-mono text-xs';
-
-                // Subject (Index 3)
-                const subjectCell = row.insertCell();
-                subjectCell.innerHTML = `<span data-field="subject">${item.subject}</span>`;
-                subjectCell.className = 'p-2 font-semibold';
-
-                // Teacher (Index 4)
-                const teacherCell = row.insertCell();
-                teacherCell.innerHTML = `<span data-field="teacher">${item.teacher}</span>`;
-                teacherCell.className = 'p-2 text-gray-300';
-
-                // Actions (Index 5)
-                const actionCell = row.insertCell();
-                actionCell.className = 'p-2 text-center whitespace-nowrap';
-                actionCell.innerHTML = `
-                    <button onclick="handleEditRow(${index}, this)" class="text-blue-400 hover:text-blue-200 p-1 rounded-md transition duration-150">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-5-1a3 3 0 11-6 0 3 3 0 016 0zM17 3l4 4L13 15 9 16l1-4L17 3z"/></svg>
-                    </button>
-                    <button onclick="handleDeleteRow(${index})" class="text-red-400 hover:text-red-200 p-1 rounded-md transition duration-150 ml-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    </button>
-                `;
-            });
-        };
-
-
-        const loadAndDisplaySchedule = (className) => {
+        const startScheduleListener = (className) => {
+            unsubscribeSchedule();
             if (!className) return;
 
             currentClassDisplay.textContent = className;
             loadingOverlay.classList.remove('hidden');
 
-            const allSchedules = getSchedulesFromStorage();
-            const schedule = allSchedules[className] || defaultSchedule;
+            const scheduleRef = doc(db, `artifacts/${appId}/public/data/schedules/${className}`);
             
-            renderSchedule(schedule, className);
-            
-            // Perbarui editor jika admin sedang melihat kelas ini
-            if (isAdmin && adminClassSelect.value === className) {
-                // Jangan panggil loadScheduleToEditor di sini, karena akan me-reset perubahan yang belum disimpan.
-                // Biarkan editor admin diupdate hanya saat dropdown admin berubah atau saat login.
-            }
-
-            setTimeout(() => loadingOverlay.classList.add('hidden'), 200);
+            unsubscribeSchedule = onSnapshot(scheduleRef, (docSnap) => {
+                loadingOverlay.classList.add('hidden');
+                let schedule = docSnap.exists() ? (docSnap.data().schedule || defaultSchedule) : defaultSchedule;
+                
+                if (docSnap.exists()) {
+                    showFeedback('success', `Jadwal Kelas ${className} berhasil diperbarui secara real-time.`);
+                } else {
+                    showFeedback('info', `Jadwal Kelas ${className} belum tersedia, menampilkan data default.`);
+                }
+                
+                renderSchedule(schedule, className);
+                
+                // Jika admin, pastikan editor admin diperbarui jika kelas yang sama dilihat
+                if (isAdmin && document.getElementById('admin-class-select').value === className) {
+                    renderAdminEditor(schedule);
+                }
+            }, (error) => {
+                console.error("Error fetching schedule:", error);
+                loadingOverlay.classList.add('hidden');
+                showFeedback('danger', 'Gagal memuat jadwal. Cek koneksi Anda.');
+            });
         };
 
-        // Fungsi Rendering Jadwal (Tampilan Biasa)
-        const renderSchedule = (schedule, className) => {
-            scheduleDisplay.innerHTML = '';
-            
-            if (!schedule || schedule.length === 0) {
-                scheduleDisplay.innerHTML = `<div class="p-6 bg-white rounded-xl shadow-md text-center text-gray-500">Tidak ada jadwal yang tersedia untuk kelas ${className}.</div>`;
-                return;
-            }
-
-            const schedulesByDay = schedule.reduce((acc, item) => {
+        const renderSchedule = (scheduleData, className) => {
+            const daysOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
+            const grouped = scheduleData.reduce((acc, item) => {
                 (acc[item.day] = acc[item.day] || []).push(item);
                 return acc;
             }, {});
 
-            DAY_ORDER.forEach(day => {
-                const daySchedules = schedulesByDay[day];
-                if (daySchedules && daySchedules.length > 0) {
-                    const dayCard = document.createElement('div');
-                    dayCard.className = 'bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden';
+            let html = `<h2 class="text-2xl font-bold mb-4 text-gray-800">Jadwal Kelas ${className}</h2>`;
+            html += `<p class="text-sm text-gray-500 mb-6">Diperbarui: ${new Date().toLocaleTimeString('id-ID')}</p>`;
+
+            daysOrder.forEach(day => {
+                const dailySchedule = grouped[day];
+                if (dailySchedule && dailySchedule.length > 0) {
+                    html += `<div class="mb-8 p-4 bg-white shadow-lg rounded-xl transition duration-300 hover:shadow-xl">
+                        <h3 class="text-xl font-semibold mb-3 text-blue-600">${day}</h3>
+                        <table class="min-w-full divide-y divide-gray-200 schedule-table">
+                            <thead class="bg-blue-50">
+                                <tr>
+                                    <th class="py-3 px-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">Waktu</th>
+                                    <th class="py-3 px-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mata Pelajaran</th>
+                                    <th class="py-3 px-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">Guru</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">`;
                     
-                    // Urutkan jadwal di setiap hari berdasarkan waktu
-                    daySchedules.sort((a, b) => a.time.localeCompare(b.time));
-
-                    let tableRows = daySchedules.map((item, index) => `
-                        <tr class="${item.subject.toLowerCase() === 'istirahat' ? 'bg-yellow-50 text-yellow-800 font-medium' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">
-                            <td class="w-1/6 font-mono text-sm">${item.time}</td>
-                            <td class="w-3/6 font-semibold">${item.subject}</td>
-                            <td class="w-2/6 text-gray-600">${item.teacher}</td>
-                        </tr>
-                    `).join('');
-
-                    dayCard.innerHTML = `
-                        <h3 class="text-xl font-bold p-4 bg-blue-600 text-white">${day}</h3>
-                        <div class="p-4">
-                            <table class="schedule-table w-full">
-                                <thead>
-                                    <tr>
-                                        <th class="w-1/6 rounded-tl-lg">Waktu</th>
-                                        <th class="w-3/6">Mata Pelajaran</th>
-                                        <th class="w-2/6 rounded-tr-lg">Guru</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${tableRows}
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-                    scheduleDisplay.appendChild(dayCard);
+                    dailySchedule.sort((a, b) => a.time.localeCompare(b.time));
+                    dailySchedule.forEach(item => {
+                        html += `<tr class="hover:bg-gray-50">
+                                    <td class="py-2 px-2 whitespace-nowrap text-sm font-medium text-gray-900">${item.time}</td>
+                                    <td class="py-2 px-2 whitespace-nowrap text-sm text-gray-700">${item.subject}</td>
+                                    <td class="py-2 px-2 whitespace-nowrap text-sm text-gray-700">${item.teacher}</td>
+                                </tr>`;
+                    });
+                    html += `</tbody></table></div>`;
                 }
             });
+            scheduleDisplay.innerHTML = html;
+        };
+        
+        const populateAdminClassDropdown = async () => {
+             const adminClassSelect = document.getElementById('admin-class-select');
+             // Admin harus dapat mengedit semua kelas XII
+             const classesToEdit = XII_CLASSES; 
+             adminClassSelect.innerHTML = `<option value="">-- Pilih Kelas yang Akan Diubah --</option>` +
+                 classesToEdit.map(cls => `<option value="${cls}">${cls}</option>`).join('');
+                 
+             // Pilih kelas yang sedang dilihat jika itu adalah kelas XII
+             if (userClass && classesToEdit.includes(userClass)) {
+                 adminClassSelect.value = userClass; 
+             }
         };
 
-        // --- FUNGSI EDITOR TABEL BARU ---
+        // --- Render Admin Editor UI ---
+        const renderAdminEditor = (scheduleData) => {
+            const editorUI = document.getElementById('admin-schedule-editor-ui');
+            const daysOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat"];
+            const grouped = scheduleData.reduce((acc, item) => {
+                (acc[item.day] = acc[item.day] || []).push(item);
+                return acc;
+            }, {});
 
-        const handleAddEntry = () => {
-            const day = editorDay.value;
-            const time = editorTime.value.trim();
-            const subject = editorSubject.value.trim();
-            const teacher = editorTeacher.value.trim();
+            let html = '';
+            
+            // Urutkan defaultSchedule berdasarkan waktu untuk mendapatkan urutan slot yang benar
+            const sortedDefaultSchedule = [...defaultSchedule].sort((a, b) => a.time.localeCompare(b.time));
+            
+            // Dapatkan semua slot waktu unik yang ada di defaultSchedule
+            const uniqueTimeSlots = [...new Set(sortedDefaultSchedule.map(item => item.time))];
 
-            if (!day || !time || !subject || !teacher) {
-                showFeedback('danger', 'Semua kolom Tambah Jadwal harus diisi.');
+            daysOrder.forEach(day => {
+                const dailySchedule = grouped[day] || [];
+                
+                // Buat peta cepat untuk lookup jadwal yang ada berdasarkan waktu
+                const scheduleMap = dailySchedule.reduce((map, item) => {
+                    map[item.time] = item;
+                    return map;
+                }, {});
+
+                html += `<div class="p-4 bg-gray-700 rounded-lg">
+                    <h4 class="text-lg font-semibold text-gray-200 mb-3">${day}</h4>
+                    <table class="min-w-full admin-edit-table">
+                        <thead>
+                            <tr>
+                                <th class="py-2 px-2 text-left text-xs font-medium text-gray-400 uppercase w-1/4">Waktu</th>
+                                <th class="py-2 px-2 text-left text-xs font-medium text-gray-400 uppercase">Mata Pelajaran</th>
+                                <th class="py-2 px-2 text-left text-xs font-medium text-gray-400 uppercase">Guru</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                
+                // Iterasi berdasarkan slot waktu unik (memastikan semua slot waktu ada)
+                uniqueTimeSlots.forEach(timeSlot => {
+                    // Coba temukan item untuk hari dan waktu ini
+                    const item = scheduleMap[timeSlot] || { subject: '', teacher: '' };
+
+                    html += `
+                        <tr class="border-t border-gray-600" data-day="${day}" data-time="${timeSlot}">
+                            <td class="py-2 px-2 text-sm text-gray-300">${timeSlot}</td>
+                            <td class="py-2 px-2"><input type="text" value="${item.subject || ''}" data-field="subject" placeholder="Nama Pelajaran"></td>
+                            <td class="py-2 px-2"><input type="text" value="${item.teacher || ''}" data-field="teacher" placeholder="Nama Guru"></td>
+                        </tr>
+                    `;
+                });
+                html += `</tbody></table></div>`;
+            });
+            editorUI.innerHTML = html;
+        };
+
+        document.getElementById('admin-class-select').addEventListener('change', async (e) => {
+            const newClass = e.target.value;
+            const editorUI = document.getElementById('admin-schedule-editor-ui');
+            
+            if (!newClass) {
+                editorUI.innerHTML = '<p class="text-gray-400 text-center">Pilih kelas untuk mulai mengedit jadwal.</p>';
+                return;
+            }
+            
+            const scheduleRef = doc(db, `artifacts/${appId}/public/data/schedules/${newClass}`);
+            loadingOverlay.classList.remove('hidden');
+            try {
+                const docSnap = await getDoc(scheduleRef);
+                loadingOverlay.classList.add('hidden');
+                const schedule = docSnap.exists() ? (docSnap.data().schedule || defaultSchedule) : defaultSchedule;
+                renderAdminEditor(schedule);
+                showFeedback('info', `Jadwal Kelas ${newClass} dimuat di panel editor.`);
+            } catch (error) {
+                console.error("Error fetching admin schedule:", error);
+                loadingOverlay.classList.add('hidden');
+                renderAdminEditor(defaultSchedule);
+                showFeedback('danger', 'Gagal memuat jadwal admin. Memuat data default.');
+            }
+        });
+
+        document.getElementById('save-schedule-btn').addEventListener('click', async () => {
+            const targetClass = document.getElementById('admin-class-select').value;
+            if (!targetClass) {
+                showFeedback('danger', 'Mohon pilih kelas yang akan disimpan.');
                 return;
             }
 
-            const newEntry = { day, time, subject, teacher };
-            currentEditingSchedule.push(newEntry);
+            // --- Kumpulkan data dari UI (Perbaikan) ---
+            const newScheduleData = [];
+            const editorRows = document.querySelectorAll('#admin-schedule-editor-ui tr[data-day]');
             
-            // Render ulang tabel editor dan kosongkan input
-            renderEditableSchedule(currentEditingSchedule);
-            editorTime.value = '';
-            editorSubject.value = '';
-            editorTeacher.value = '';
-            showFeedback('info', `Entri untuk ${day} berhasil ditambahkan.`);
-        };
+            editorRows.forEach(row => {
+                const day = row.dataset.day;
+                const time = row.dataset.time;
+                const subjectInput = row.querySelector('input[data-field="subject"]');
+                const teacherInput = row.querySelector('input[data-field="teacher"]');
 
-        // Fungsi yang dipanggil saat tombol edit diklik
-        const handleEditRow = (index, buttonElement) => {
-            const row = buttonElement.closest('tr');
-            const item = currentEditingSchedule[index];
-
-            if (!row || !item) return;
-
-            // 1. Ubah tombol menjadi 'Simpan'
-            buttonElement.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            `;
-            buttonElement.classList.remove('text-blue-400');
-            buttonElement.classList.add('text-green-400');
-            buttonElement.setAttribute('onclick', `handleSaveEdit(${index}, this)`);
-
-            // 2. Ubah sel menjadi input field
-
-            // Sel Hari (Index 1): Menggunakan Select Box
-            const dayCell = row.cells[1];
-            const dayInput = document.createElement('select');
-            dayInput.className = 'w-full p-1 border border-gray-500 bg-gray-800 rounded text-sm';
-            DAY_ORDER.slice(0, 5).forEach(d => { // Hanya Senin sampai Jumat
-                const option = document.createElement('option');
-                option.value = d;
-                option.textContent = d;
-                if (d === item.day) option.selected = true;
-                dayInput.appendChild(option);
-            });
-            dayCell.innerHTML = '';
-            dayCell.appendChild(dayInput);
-            dayInput.setAttribute('data-field-input', 'day');
-
-            // Sel Waktu, Pelajaran, Guru (Index 2, 3, 4): Menggunakan Text Input
-            const fields = ['time', 'subject', 'teacher'];
-            fields.forEach((field, i) => {
-                const cell = row.cells[i + 2];
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.value = item[field];
-                input.placeholder = field.charAt(0).toUpperCase() + field.slice(1);
-                input.className = 'w-full p-1 border border-gray-500 bg-gray-800 rounded text-sm';
-                input.setAttribute('data-field-input', field);
-                cell.innerHTML = '';
-                cell.appendChild(input);
-            });
-        };
-
-        // Fungsi yang dipanggil saat tombol simpan (dari mode edit) diklik
-        const handleSaveEdit = (index, buttonElement) => {
-            const row = buttonElement.closest('tr');
-            const inputs = row.querySelectorAll('[data-field-input]');
-            
-            const updatedItem = {};
-            let isValid = true;
-
-            inputs.forEach(input => {
-                const field = input.getAttribute('data-field-input');
-                const value = input.value.trim();
-                
-                if (!value) {
-                    showFeedback('danger', `Kolom ${field.toUpperCase()} tidak boleh kosong.`);
-                    input.focus();
-                    isValid = false;
-                    return;
+                // Hanya simpan item jika setidaknya Mata Pelajaran atau Guru terisi
+                if (day && time && subjectInput && teacherInput) {
+                    const subject = subjectInput.value.trim();
+                    const teacher = teacherInput.value.trim();
+                    
+                    if (subject || teacher) { // Hanya simpan jika ada konten
+                        newScheduleData.push({
+                            day: day,
+                            time: time,
+                            subject: subject,
+                            teacher: teacher
+                        });
+                    }
                 }
-                updatedItem[field] = value;
             });
 
-            if (!isValid) return;
-
-            // Update state
-            currentEditingSchedule[index] = updatedItem;
-
-            // Render ulang editor (untuk kembali ke mode tampilan dan memperbarui data)
-            renderEditableSchedule(currentEditingSchedule);
-            showFeedback('success', `Entri jadwal berhasil diperbarui.`);
-        };
-        
-        // Fungsi yang dipanggil saat tombol hapus diklik
-        const handleDeleteRow = (index) => {
-            if (confirm(`Yakin ingin menghapus jadwal: ${currentEditingSchedule[index].subject} pada hari ${currentEditingSchedule[index].day}?`)) {
-                currentEditingSchedule.splice(index, 1);
-                renderEditableSchedule(currentEditingSchedule);
-                showFeedback('success', 'Entri jadwal berhasil dihapus dari editor.');
+            if (newScheduleData.length === 0) {
+                showFeedback('info', 'Tidak ada data jadwal yang valid untuk disimpan.');
+                // Admin mungkin ingin menghapus jadwal. Kita akan simpan data kosong.
             }
-        };
 
-        // Fungsi yang dipanggil saat tombol Simpan Perubahan Jadwal diklik
-        const handleSaveToStorage = () => {
-            const selectedClass = adminClassSelect.value;
-            saveScheduleToLocalStorage(selectedClass, currentEditingSchedule);
-            
-            // Segarkan (render ulang) tampilan jika admin mengedit jadwal yang sedang ditampilkan
-            if (selectedClass === classSelect.value) {
-                renderSchedule(currentEditingSchedule, selectedClass);
+            loadingOverlay.classList.remove('hidden');
+            try {
+                const docRef = doc(db, `artifacts/${appId}/public/data/schedules/${targetClass}`);
+                // Simpan data, yang bisa berupa array kosong jika semua dihapus
+                await setDoc(docRef, { schedule: newScheduleData }); 
+                showFeedback('success', `Jadwal untuk Kelas ${targetClass} berhasil disimpan.`);
+            } catch (error) {
+                console.error("Error saving schedule:", error);
+                showFeedback('danger', `Gagal menyimpan jadwal: ${error.message}`);
+            } finally {
+                loadingOverlay.classList.add('hidden');
             }
-        }
+        });
         
-        // Agar fungsi-fungsi editor dapat diakses oleh onclick di HTML
-        window.handleEditRow = handleEditRow;
-        window.handleSaveEdit = handleSaveEdit;
-        window.handleDeleteRow = handleDeleteRow;
-
-
-        // --- Event Listeners ---
-
-        document.addEventListener('DOMContentLoaded', initApp);
-        
-        classSelect.addEventListener('change', (e) => {
+        document.getElementById('class-select').addEventListener('change', (e) => {
             const newClass = e.target.value;
             if (newClass) {
+                localStorage.setItem('userClass', newClass); 
                 userClass = newClass;
-                localStorage.setItem('userClass', newClass);
-                
-                if (newClass !== ADMIN_CLASS) {
-                    isAdmin = false;
-                    localStorage.setItem('userEmail', 'siswa@sekolah.edu'); // Ganti email jika bukan admin lagi
-                    adminPanel.classList.add('hidden');
-                    document.getElementById('admin-toggle-btn').classList.add('hidden');
-                }
-                loadAndDisplaySchedule(newClass);
+                startScheduleListener(userClass);
             }
         });
+
+        initFirebase();
         
         document.getElementById('admin-toggle-btn').addEventListener('click', () => {
-             adminPanel.classList.toggle('hidden');
+            adminPanel.classList.toggle('hidden');
+            if (!adminPanel.classList.contains('hidden')) {
+                const adminSelect = document.getElementById('admin-class-select');
+                
+                // Jika userClass adalah salah satu kelas yang dapat diedit, pilih kelas tersebut
+                if(userClass && XII_CLASSES.includes(userClass)) {
+                    adminSelect.value = userClass;
+                } else {
+                    // Jika login sebagai AdminSekolah, pastikan dropdown defaultnya tidak kosong
+                    // atau muat kelas pertama
+                    adminSelect.value = adminSelect.options[1]?.value || ''; 
+                }
+                adminSelect.dispatchEvent(new Event('change'));
+            }
         });
-
-        // Event listener untuk tombol Log Out baru
-        document.getElementById('logout-btn').addEventListener('click', () => {
-            // Hapus data sesi dari localStorage
-            localStorage.removeItem('userEmail');
-            localStorage.removeItem('userClass');
-            // Muat ulang halaman, yang akan mengarahkan ke layar login
-            location.reload();
-        });
-        
-        // Event listener: Admin mengganti kelas yang akan diedit
-        adminClassSelect.addEventListener('change', (e) => {
-            loadScheduleToEditor(e.target.value);
-        });
-
-        // Event listener: Tombol Tambah Jadwal di Editor
-        addScheduleBtn.addEventListener('click', handleAddEntry);
-
-        // Event listener: Tombol Simpan Perubahan Jadwal (untuk menyimpan ke localStorage)
-        saveScheduleBtn.addEventListener('click', handleSaveToStorage);
 
     </script>
 </body>
